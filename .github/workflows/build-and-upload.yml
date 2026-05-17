@@ -41,19 +41,167 @@ jobs:
       shell: bash
       run: scripts/apply-patches.sh
 
-    # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install) with
-    # -DENABLE_STEAM=ON -DSTEAMWORKS_SDK_ROOT=${{github.workspace}}/steamworks_sdk
-    # TODO: stage build output into ${{github.workspace}}/output/.
-    # TODO: after install, copy fonts/ into output/fonts/ so the bundled
-    # Noto fonts ship next to the binary (patch 0003 loads them from
-    # "fonts/..." relative to the executable's CWD).
+    - name: Update vcpkg
+      shell: pwsh
+      run: |
+        $vcpkgCommit = '99a97de2cb371449d4fb9dc970f2ac562d689ec2'
+        pushd "$env:VCPKG_INSTALLATION_ROOT"
+        git fetch origin $vcpkgCommit
+        git reset --hard $vcpkgCommit
+        ./bootstrap-vcpkg.bat
+        ./vcpkg.exe integrate install
+        popd
+
+    - name: Setup NuGet credentials
+      shell: pwsh
+      run: |
+        $nugetCmd = vcpkg fetch nuget | Select-Object -Last 1
+        $nugetSource = 'https://nuget.pkg.github.com/celestiamobile/index.json'
+        & "$nugetCmd" sources add `
+          -Source "$nugetSource" `
+          -StorePasswordInClearText `
+          -Name "GitHub" `
+          -Username 'celestiamobile' `
+          -Password '${{secrets.GITHUB_TOKEN}}'
+
+    - name: Find ImageMagick
+      shell: pwsh
+      run: |
+        $magickDir = $null
+        foreach ($root in @("C:\Program Files", "C:\Program Files (x86)", "C:\Tools", "C:\ProgramData\chocolatey\lib")) {
+          $found = Get-ChildItem "$root\ImageMagick*" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) { $magickDir = $found.FullName; break }
+        }
+        if (-not $magickDir) {
+          $magickExe = (Get-Command magick -ErrorAction SilentlyContinue).Source
+          if ($magickExe) { $magickDir = Split-Path $magickExe }
+        }
+        if (-not $magickDir) {
+          Write-Host "ImageMagick not found, installing..."
+          choco install imagemagick -y
+          refreshenv
+          $magickExe = (Get-Command magick -ErrorAction SilentlyContinue).Source
+          if ($magickExe) { $magickDir = Split-Path $magickExe }
+        }
+        Write-Host "ImageMagick dir: $magickDir"
+        if ($magickDir) {
+          echo "$magickDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "ImageMagick_HOME=$magickDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        } else {
+          Write-Error "Failed to locate ImageMagick"; exit 1
+        }
+
+    - name: Install dependencies
+      shell: pwsh
+      run: |
+        $packages = @(
+          'boost-container',
+          'boost-container-hash',
+          'boost-smart-ptr',
+          'eigen3',
+          'ffmpeg[core,avcodec,avformat,gpl,swscale,x264]',
+          'fmt',
+          'freetype',
+          'gettext[tools]',
+          'gperf',
+          'libepoxy',
+          'libjpeg-turbo',
+          'libpng',
+          'luajit',
+          'qtbase[core,opengl,widgets,freetype,harfbuzz,jpeg,png]'
+        )
+
+        $triplet = 'x64-windows-release'
+        pushd "$env:VCPKG_INSTALLATION_ROOT"
+        ./vcpkg.exe --overlay-triplets=${{github.workspace}}/celestia/windows/vcpkg-triplets `
+                    --triplet="$triplet" `
+                    --host-triplet="$triplet" `
+                    install --recurse @packages
+        popd
+
+    - name: Configure CMake
+      shell: pwsh
+      run: |
+        $triplet = 'x64-windows-release'
+        cmake -B '${{github.workspace}}/build' `
+              -S '${{github.workspace}}/celestia' `
+              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+              -DVCPKG_OVERLAY_TRIPLETS="${{github.workspace}}/celestia/windows/vcpkg-triplets" `
+              -DVCPKG_TARGET_TRIPLET="$triplet" `
+              -DCMAKE_GENERATOR_PLATFORM='x64' `
+              -DCMAKE_INSTALL_PREFIX="${{github.workspace}}/install" `
+              -DENABLE_SPICE=OFF        `
+              -DENABLE_TOOLS=OFF        `
+              -DENABLE_TESTS=ON         `
+              -DENABLE_SDL=OFF          `
+              -DENABLE_QT5=OFF          `
+              -DENABLE_WIN=OFF          `
+              -DENABLE_QT6=ON           `
+              -DENABLE_FFMPEG=ON        `
+              -DENABLE_MINIAUDIO=ON     `
+              -DENABLE_LTO=ON           `
+              -DENABLE_STEAM=ON         `
+              -DSTEAMWORKS_SDK_ROOT="${{github.workspace}}/steamworks_sdk" `
+              -DUSE_ICU=ON              `
+              -DUSE_WIN_ICU=ON
+
+    - name: Build
+      shell: pwsh
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} '--' /maxcpucount:2 /nologo
+
+    - name: Test
+      shell: pwsh
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}}
+
+    - name: Install Celestia and Qt6 frontend
+      shell: pwsh
+      run: |
+        cmake --install ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --component core
+        cmake --install ${{github.workspace}}/build --config ${{env.BUILD_TYPE}} --component qt6gui
+
+    - name: Install CelestiaContent
+      shell: pwsh
+      run: |
+        $triplet = 'x64-windows-release'
+        cmake -S ${{github.workspace}}/content -B ${{github.workspace}}/content/build `
+              -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+              -DVCPKG_OVERLAY_TRIPLETS="${{github.workspace}}/celestia/windows/vcpkg-triplets" `
+              -DVCPKG_TARGET_TRIPLET="$triplet" `
+              -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install `
+              -DImageMagick_magick_EXECUTABLE="$env:ImageMagick_HOME/magick.exe" `
+              -DImageMagick_convert_EXECUTABLE="$env:ImageMagick_HOME/magick.exe" `
+              -DImageMagick_identify_EXECUTABLE="$env:ImageMagick_HOME/magick.exe"
+        cmake --build ${{github.workspace}}/content/build --config ${{env.BUILD_TYPE}} --target install
+
+    - name: Run windeployqt
+      shell: pwsh
+      run: |
+        $triplet = 'x64-windows-release'
+        $windeployqt = "$env:VCPKG_INSTALLATION_ROOT/installed/$triplet/tools/Qt6/bin/windeployqt.exe"
+        & $windeployqt "${{github.workspace}}/install/celestia-qt6.exe"
+
+    - name: Deploy bundled Noto fonts
+      shell: pwsh
+      run: |
+        $dest = "${{github.workspace}}/install/fonts"
+        New-Item -ItemType Directory -Force -Path $dest | Out-Null
+        Copy-Item -Path "${{github.workspace}}/fonts/*" -Destination $dest -Force
+
+    - name: Stage SteamPipe content
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path "${{github.workspace}}/output" | Out-Null
+        Copy-Item -Path "${{github.workspace}}/install/*" `
+                  -Destination "${{github.workspace}}/output/" `
+                  -Recurse -Force
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v5
       if: success()
       with:
         name: celestia-steam-build
-        if-no-files-found: warn
+        if-no-files-found: error
         retention-days: 10
         path: output/
 
