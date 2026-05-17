@@ -26,14 +26,8 @@ env:
 
 jobs:
   build:
-    name: "build-${{matrix.platform}}"
-    runs-on: ${{matrix.os}}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-x64
-            os: windows-latest
+    name: "build-windows-x64"
+    runs-on: windows-latest
 
     steps:
     - name: Checkout celestia-steam
@@ -66,16 +60,16 @@ jobs:
 
     # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install) with
     # -DENABLE_STEAM=ON -DSTEAMWORKS_SDK_ROOT=${{github.workspace}}/steamworks_sdk
-    # TODO: stage build output into ${{github.workspace}}/output/<platform>/.
+    # TODO: stage build output into ${{github.workspace}}/output/.
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v5
       if: success()
       with:
-        name: celestia-steam-${{matrix.platform}}
+        name: celestia-steam-build
         if-no-files-found: warn
         retention-days: 10
-        path: output/${{matrix.platform}}/
+        path: output/
 
   upload-to-steam:
     name: "Upload to SteamPipe"
@@ -87,9 +81,10 @@ jobs:
     - name: Checkout celestia-steam
       uses: actions/checkout@v6
 
-    - name: Download all build artifacts
+    - name: Download build artifact
       uses: actions/download-artifact@v5
       with:
+        name: celestia-steam-build
         path: content
 
     - name: Install SteamCMD

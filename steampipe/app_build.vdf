@@ -10,8 +10,6 @@
 
     "depots"
     {
-        "DEPOT_WINDOWS_PLACEHOLDER" "depot_windows.vdf"
-        "DEPOT_LINUX_PLACEHOLDER"   "depot_linux.vdf"
-        "DEPOT_MACOS_PLACEHOLDER"   "depot_macos.vdf"
+        "DEPOT_PLACEHOLDER" "depot.vdf"
     }
 }

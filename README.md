@@ -5,8 +5,8 @@ Build orchestration and Steam-specific patches for shipping Celestia on Steam.
 This repository does not contain Celestia source code. It checks out upstream
 [Celestia](https://github.com/CelestiaProject/Celestia) and
 [CelestiaContent](https://github.com/CelestiaProject/CelestiaContent), applies
-the patches in `patches/`, builds for each Steam-supported platform, and
-uploads the result via SteamPipe.
+the patches in `patches/`, builds the Windows x64 binary, and uploads the
+result via SteamPipe. Windows is the only target platform.
 
 ## Layout
 
