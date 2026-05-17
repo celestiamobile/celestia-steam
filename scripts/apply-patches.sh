@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PATCH_DIR="${REPO_ROOT}/patches"
 CELESTIA_DIR="${REPO_ROOT}/celestia"
 
-if [[ ! -d "${CELESTIA_DIR}/.git" ]]; then
+if [[ ! -e "${CELESTIA_DIR}/.git" ]]; then
     echo "error: ${CELESTIA_DIR} is not a git checkout — did you forget" >&2
     echo "       'git submodule update --init --recursive'?" >&2
     exit 1
