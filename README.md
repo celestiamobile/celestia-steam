@@ -2,11 +2,12 @@
 
 Build orchestration and Steam-specific patches for shipping Celestia on Steam.
 
-This repository does not contain Celestia source code. It checks out upstream
+This repository is a build orchestrator. It pins upstream
 [Celestia](https://github.com/CelestiaProject/Celestia) and
-[CelestiaContent](https://github.com/CelestiaProject/CelestiaContent), applies
-the patches in `patches/`, builds the Windows x64 binary, and uploads the
-result via SteamPipe. Windows is the only target platform.
+[CelestiaContent](https://github.com/CelestiaProject/CelestiaContent) at
+known-good commits via submodules, applies the patches in `patches/`, builds
+the Windows x64 binary, and uploads the result via SteamPipe. Windows is the
+only target platform.
 
 ## Layout
 
@@ -14,9 +15,26 @@ result via SteamPipe. Windows is the only target platform.
 patches/                 quilt-style patches against upstream Celestia
 steampipe/               SteamPipe app/depot configuration (.vdf)
 scripts/                 helper scripts (patch application, build, upload)
+celestia/                submodule — upstream CelestiaProject/Celestia
+content/                 submodule — upstream CelestiaProject/CelestiaContent
 steamworks_sdk/          submodule — community mirror of the Steamworks SDK
 .github/workflows/       build + upload pipeline
 ```
+
+## Upstream pinning
+
+`celestia/` and `content/` are submodules pinned to specific commits of the
+upstream repos. Bumping upstream is a deliberate operation:
+
+```sh
+git submodule update --remote celestia content
+# re-test the patches against the new commits
+git commit -am "Bump upstream celestia/content"
+```
+
+Pinning matters because the patches in `patches/` target specific upstream
+files — a silent upstream refactor can desync them without breaking the
+patch-apply step.
 
 ## Steamworks SDK
 
@@ -53,16 +71,12 @@ Depot IDs are placeholders likewise.
 
 ## Building locally
 
-Follow upstream Celestia's normal build instructions, but apply the patches in
-`patches/` first:
-
 ```sh
 git clone --recursive https://github.com/celestiamobile/celestia-steam.git
-git clone https://github.com/CelestiaProject/Celestia.git
-cd Celestia
-../celestia-steam/scripts/apply-patches.sh
-cmake -B build -S . -DENABLE_STEAM=ON \
-    -DSTEAMWORKS_SDK_ROOT=../celestia-steam/steamworks_sdk
+cd celestia-steam
+scripts/apply-patches.sh         # applies patches/*.patch to celestia/
+cmake -B build -S celestia -DENABLE_STEAM=ON \
+    -DSTEAMWORKS_SDK_ROOT=../steamworks_sdk
 cmake --build build
 ```
 

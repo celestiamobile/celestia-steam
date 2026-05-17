@@ -1,3 +1,9 @@
 [submodule "steamworks_sdk"]
 	path = steamworks_sdk
 	url = https://github.com/rlabrecque/SteamworksSDK.git
+[submodule "celestia"]
+	path = celestia
+	url = https://github.com/CelestiaProject/Celestia.git
+[submodule "content"]
+	path = content
+	url = https://github.com/CelestiaProject/CelestiaContent.git

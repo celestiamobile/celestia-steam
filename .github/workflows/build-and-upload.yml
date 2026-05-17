@@ -26,28 +26,14 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Checkout celestia-steam
+    - name: Checkout celestia-steam (with submodules)
       uses: actions/checkout@v6
       with:
         submodules: recursive
 
-    - name: Checkout Celestia source
-      uses: actions/checkout@v6
-      with:
-        repository: CelestiaProject/Celestia
-        path: 'celestia'
-        submodules: true
-
-    - name: Checkout CelestiaContent
-      uses: actions/checkout@v6
-      with:
-        repository: CelestiaProject/CelestiaContent
-        path: 'content'
-
     - name: Apply celestia-steam patches
       shell: bash
-      working-directory: celestia
-      run: ../scripts/apply-patches.sh
+      run: scripts/apply-patches.sh
 
     # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install) with
     # -DENABLE_STEAM=ON -DSTEAMWORKS_SDK_ROOT=${{github.workspace}}/steamworks_sdk

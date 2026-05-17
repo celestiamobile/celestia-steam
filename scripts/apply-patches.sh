@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Apply celestia-steam patches to an upstream Celestia checkout.
+# Apply celestia-steam patches to the celestia/ submodule.
 #
-# Usage: from within the upstream Celestia checkout:
-#   ../celestia-steam/scripts/apply-patches.sh
+# Usage (from celestia-steam root):
+#   scripts/apply-patches.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PATCH_DIR="${SCRIPT_DIR}/../patches"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PATCH_DIR="${REPO_ROOT}/patches"
+CELESTIA_DIR="${REPO_ROOT}/celestia"
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "error: must be run from inside a git checkout of Celestia" >&2
+if [[ ! -d "${CELESTIA_DIR}/.git" ]]; then
+    echo "error: ${CELESTIA_DIR} is not a git checkout — did you forget" >&2
+    echo "       'git submodule update --init --recursive'?" >&2
     exit 1
 fi
 
@@ -20,6 +23,7 @@ if [[ ${#patches[@]} -eq 0 ]]; then
     exit 0
 fi
 
+cd "${CELESTIA_DIR}"
 for patch in "${patches[@]}"; do
     echo "applying $(basename "$patch")"
     git apply --index "$patch"
