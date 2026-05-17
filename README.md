@@ -15,6 +15,8 @@ only target platform.
 patches/                 quilt-style patches against upstream Celestia
 steampipe/               SteamPipe app/depot configuration (.vdf)
 scripts/                 helper scripts (patch application, build, upload)
+fonts/                   Noto fonts bundled with the Steam build (CJK,
+                         Arabic, Georgian, Latin)
 celestia/                submodule — upstream CelestiaProject/Celestia
 content/                 submodule — upstream CelestiaProject/CelestiaContent
 steamworks_sdk/          submodule — community mirror of the Steamworks SDK
@@ -70,6 +72,13 @@ Current patches:
   UUID-named directory; those directories are appended to the
   `extrasDirectories` list passed to `CelestiaCore::initSimulation`,
   ordered by UUID ascending for deterministic load order.
+- `0003-select-bundled-noto-font-by-ui-language.patch` — after
+  `appCore->initRenderer` in the Qt6 GL widget, picks regular + bold
+  Noto fonts from `fonts/` based on the active gettext language
+  (`_("LANGUAGE")`) and applies them via `setHudFont`,
+  `setHudTitleFont`, and `setRendererFont` for both `Normal` (size 9)
+  and `Large` (size 15) styles. CJK uses the appropriate `.ttc`
+  collection index per language (ja=0, ko=1, zh_CN=2, zh_TW=3).
 
 ## SteamPipe
 

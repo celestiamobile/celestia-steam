@@ -38,6 +38,9 @@ jobs:
     # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install) with
     # -DENABLE_STEAM=ON -DSTEAMWORKS_SDK_ROOT=${{github.workspace}}/steamworks_sdk
     # TODO: stage build output into ${{github.workspace}}/output/.
+    # TODO: after install, copy fonts/ into output/fonts/ so the bundled
+    # Noto fonts ship next to the binary (patch 0003 loads them from
+    # "fonts/..." relative to the executable's CWD).
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v5
