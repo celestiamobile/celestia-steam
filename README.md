@@ -14,24 +14,24 @@ result via SteamPipe. Windows is the only target platform.
 patches/                 quilt-style patches against upstream Celestia
 steampipe/               SteamPipe app/depot configuration (.vdf)
 scripts/                 helper scripts (patch application, build, upload)
-steamworks_sdk/          (gitignored) place the SDK here locally; CI fetches it
+steamworks_sdk/          submodule — community mirror of the Steamworks SDK
 .github/workflows/       build + upload pipeline
 ```
 
 ## Steamworks SDK
 
-CI checks out the SDK from the community mirror
-[rlabrecque/SteamworksSDK](https://github.com/rlabrecque/SteamworksSDK),
-pinned by commit SHA. The mirror is widely used by open-source Steam projects
-but is not an official Valve distribution; users of this build pipeline remain
-bound by Valve's
-[Steamworks SDK Access Agreement](https://partner.steamgames.com/documentation/sdk_access_agreement)
-regardless of the source.
+The SDK is included as a git submodule pointing at the community mirror
+[rlabrecque/SteamworksSDK](https://github.com/rlabrecque/SteamworksSDK).
+Clone this repo with `--recursive` (or run `git submodule update --init` after
+cloning) to fetch it. Bumping the SDK version is a normal git operation —
+update the submodule pointer and commit.
 
-For local builds, either download the latest SDK from the
-[Steamworks SDK downloads page](https://partner.steamgames.com/downloads/list)
-(requires partner login) and extract into `steamworks_sdk/`, or clone the
-mirror at the same path.
+The mirror is widely used by open-source Steam projects but is not an
+official Valve distribution; users of this build pipeline remain bound by
+Valve's
+[Steamworks SDK Access Agreement](https://partner.steamgames.com/documentation/sdk_access_agreement)
+regardless of the source. To use a partner-site download instead, deinit the
+submodule and drop the unpacked SDK into `steamworks_sdk/`.
 
 ## Patches
 
@@ -57,10 +57,12 @@ Follow upstream Celestia's normal build instructions, but apply the patches in
 `patches/` first:
 
 ```sh
+git clone --recursive https://github.com/celestiamobile/celestia-steam.git
 git clone https://github.com/CelestiaProject/Celestia.git
 cd Celestia
 ../celestia-steam/scripts/apply-patches.sh
-cmake -B build -S . -DENABLE_STEAM=ON -DSTEAMWORKS_SDK_ROOT=/path/to/sdk
+cmake -B build -S . -DENABLE_STEAM=ON \
+    -DSTEAMWORKS_SDK_ROOT=../celestia-steam/steamworks_sdk
 cmake --build build
 ```
 

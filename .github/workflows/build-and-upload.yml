@@ -19,10 +19,6 @@ concurrency:
 env:
   BUILD_TYPE: RelWithDebInfo
   VCPKG_BINARY_SOURCES: 'clear;nuget,GitHub,readwrite'
-  # Steamworks SDK source — community mirror by rlabrecque
-  # (commit corresponds to upstream v1.64, 2026-03-13).
-  STEAMWORKS_SDK_REPO: rlabrecque/SteamworksSDK
-  STEAMWORKS_SDK_REF: be6107f4b75bf996531415c53a6488a33a2a1be3
 
 jobs:
   build:
@@ -32,6 +28,8 @@ jobs:
     steps:
     - name: Checkout celestia-steam
       uses: actions/checkout@v6
+      with:
+        submodules: recursive
 
     - name: Checkout Celestia source
       uses: actions/checkout@v6
@@ -45,13 +43,6 @@ jobs:
       with:
         repository: CelestiaProject/CelestiaContent
         path: 'content'
-
-    - name: Checkout Steamworks SDK
-      uses: actions/checkout@v6
-      with:
-        repository: ${{ env.STEAMWORKS_SDK_REPO }}
-        ref: ${{ env.STEAMWORKS_SDK_REF }}
-        path: 'steamworks_sdk'
 
     - name: Apply celestia-steam patches
       shell: bash
