@@ -18,6 +18,21 @@ steamworks_sdk/          (gitignored) place the SDK here locally; CI fetches it
 .github/workflows/       build + upload pipeline
 ```
 
+## Steamworks SDK
+
+CI checks out the SDK from the community mirror
+[rlabrecque/SteamworksSDK](https://github.com/rlabrecque/SteamworksSDK),
+pinned by commit SHA. The mirror is widely used by open-source Steam projects
+but is not an official Valve distribution; users of this build pipeline remain
+bound by Valve's
+[Steamworks SDK Access Agreement](https://partner.steamgames.com/documentation/sdk_access_agreement)
+regardless of the source.
+
+For local builds, download the SDK from
+`https://partner.steamgames.com/downloads/steamworks_sdk_164.zip` (requires
+partner login) and extract into `steamworks_sdk/`, or clone the mirror at the
+same path.
+
 ## Patches
 
 Patches are kept minimal — Celestia upstream is intentionally not modified for

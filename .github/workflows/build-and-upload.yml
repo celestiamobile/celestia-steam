@@ -19,6 +19,10 @@ concurrency:
 env:
   BUILD_TYPE: RelWithDebInfo
   VCPKG_BINARY_SOURCES: 'clear;nuget,GitHub,readwrite'
+  # Steamworks SDK source — community mirror by rlabrecque
+  # (commit corresponds to upstream v1.64, 2026-03-13).
+  STEAMWORKS_SDK_REPO: rlabrecque/SteamworksSDK
+  STEAMWORKS_SDK_REF: be6107f4b75bf996531415c53a6488a33a2a1be3
 
 jobs:
   build:
@@ -48,13 +52,20 @@ jobs:
         repository: CelestiaProject/CelestiaContent
         path: 'content'
 
+    - name: Checkout Steamworks SDK
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ env.STEAMWORKS_SDK_REPO }}
+        ref: ${{ env.STEAMWORKS_SDK_REF }}
+        path: 'steamworks_sdk'
+
     - name: Apply celestia-steam patches
       shell: bash
       working-directory: celestia
       run: ../scripts/apply-patches.sh
 
-    # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install).
-    # TODO: Steamworks SDK fetch step (download from a private artifact source).
+    # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install) with
+    # -DENABLE_STEAM=ON -DSTEAMWORKS_SDK_ROOT=${{github.workspace}}/steamworks_sdk
     # TODO: stage build output into ${{github.workspace}}/output/<platform>/.
 
     - name: Upload build artifact
