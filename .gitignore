@@ -1,0 +1,8 @@
+steamworks_sdk/
+build/
+install/
+content/
+celestia/
+output/
+*.log
+.DS_Store

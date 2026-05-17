@@ -1,0 +1,17 @@
+"appbuild"
+{
+    "appid"        "APPID_PLACEHOLDER"
+    "desc"         "Celestia"
+    "buildoutput"  "..\output\"
+    "contentroot"  "..\content\"
+    "setlive"      ""
+    "preview"      "0"
+    "local"        ""
+
+    "depots"
+    {
+        "DEPOT_WINDOWS_PLACEHOLDER" "depot_windows.vdf"
+        "DEPOT_LINUX_PLACEHOLDER"   "depot_linux.vdf"
+        "DEPOT_MACOS_PLACEHOLDER"   "depot_macos.vdf"
+    }
+}

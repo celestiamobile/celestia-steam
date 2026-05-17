@@ -1,0 +1,14 @@
+"DepotBuildConfig"
+{
+    "DepotID" "DEPOT_MACOS_PLACEHOLDER"
+
+    "FileMapping"
+    {
+        "LocalPath" "macos/*"
+        "DepotPath" "."
+        "recursive" "1"
+    }
+
+    "FileExclusion" "*.log"
+    "FileExclusion" "*.tmp"
+}

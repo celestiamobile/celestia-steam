@@ -1,0 +1,105 @@
+name: Build and Upload to Steam
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      upload_to_steam:
+        description: 'Upload build to Steam (requires App ID + creds)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  BUILD_TYPE: RelWithDebInfo
+  VCPKG_BINARY_SOURCES: 'clear;nuget,GitHub,readwrite'
+
+jobs:
+  build:
+    name: "build-${{matrix.platform}}"
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-x64
+            os: windows-latest
+
+    steps:
+    - name: Checkout celestia-steam
+      uses: actions/checkout@v6
+
+    - name: Checkout Celestia source
+      uses: actions/checkout@v6
+      with:
+        repository: CelestiaProject/Celestia
+        path: 'celestia'
+        submodules: true
+
+    - name: Checkout CelestiaContent
+      uses: actions/checkout@v6
+      with:
+        repository: CelestiaProject/CelestiaContent
+        path: 'content'
+
+    - name: Apply celestia-steam patches
+      shell: bash
+      working-directory: celestia
+      run: ../scripts/apply-patches.sh
+
+    # TODO: build steps mirroring celestia-170 (vcpkg, cmake, install).
+    # TODO: Steamworks SDK fetch step (download from a private artifact source).
+    # TODO: stage build output into ${{github.workspace}}/output/<platform>/.
+
+    - name: Upload build artifact
+      uses: actions/upload-artifact@v5
+      if: success()
+      with:
+        name: celestia-steam-${{matrix.platform}}
+        if-no-files-found: warn
+        retention-days: 10
+        path: output/${{matrix.platform}}/
+
+  upload-to-steam:
+    name: "Upload to SteamPipe"
+    needs: build
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_to_steam == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout celestia-steam
+      uses: actions/checkout@v6
+
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v5
+      with:
+        path: content
+
+    - name: Install SteamCMD
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lib32gcc-s1
+        mkdir -p ~/steamcmd
+        cd ~/steamcmd
+        curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxvf -
+
+    # TODO: configure Steam Guard via STEAM_CONFIG_VDF secret (base64-encoded
+    # config.vdf from a previously authenticated session).
+    # TODO: replace placeholders in steampipe/*.vdf with real App/Depot IDs
+    # from repository secrets before invoking steamcmd.
+
+    - name: Upload via SteamPipe
+      env:
+        STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+        STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+      run: |
+        ~/steamcmd/steamcmd.sh \
+          +login "$STEAM_USERNAME" "$STEAM_PASSWORD" \
+          +run_app_build "${{github.workspace}}/steampipe/app_build.vdf" \
+          +quit
