@@ -1,0 +1,225 @@
+diff --git a/src/celestia/qt/CelestiaQtCommon.cmake b/src/celestia/qt/CelestiaQtCommon.cmake
+index 079ecb68..7aea593c 100644
+--- a/src/celestia/qt/CelestiaQtCommon.cmake
++++ b/src/celestia/qt/CelestiaQtCommon.cmake
+@@ -23,6 +23,7 @@ function(GetQtSources UseWayland)
+     qtsolarsystembrowser.cpp
+     qttimetoolbar.cpp
+     qttourguide.cpp
++    steamintegration.cpp
+     xbel.cpp
+   )
+ 
+@@ -48,6 +49,7 @@ function(GetQtSources UseWayland)
+     qtsolarsystembrowser.h
+     qttimetoolbar.h
+     qttourguide.h
++    steamintegration.h
+     xbel.h
+   )
+ 
+diff --git a/src/celestia/qt/qtappwin.cpp b/src/celestia/qt/qtappwin.cpp
+index 8227c87d..b1180fbf 100644
+--- a/src/celestia/qt/qtappwin.cpp
++++ b/src/celestia/qt/qtappwin.cpp
+@@ -97,6 +97,7 @@
+ #include "qtsolarsystembrowser.h"
+ #include "qttimetoolbar.h"
+ #include "qttourguide.h"
++#include "steamintegration.h"
+ 
+ #ifdef _WIN32
+ #include <QRect>
+@@ -282,6 +283,12 @@ CelestiaAppWindow::init(const CelestiaCommandLineOptions& options)
+     for (const auto& dir : options.extrasDirectories)
+         extrasDirectories.push_back(QStringToPath(dir));
+ 
++    // Append any Steam Workshop content directories the user has subscribed to.
++    auto workshopDirs = getSteamWorkshopExtrasDirs();
++    extrasDirectories.insert(extrasDirectories.end(),
++                             std::make_move_iterator(workshopDirs.begin()),
++                             std::make_move_iterator(workshopDirs.end()));
++
+     initAppDataDirectory();
+ 
+     m_appCore = new CelestiaCore();
+diff --git a/src/celestia/qt/qtmain.cpp b/src/celestia/qt/qtmain.cpp
+index 5e6cf304..6c06c004 100644
+--- a/src/celestia/qt/qtmain.cpp
++++ b/src/celestia/qt/qtmain.cpp
+@@ -37,6 +37,7 @@
+ #include "qtappwin.h"
+ #include "qtcommandline.h"
+ #include "qtgettext.h"
++#include "steamintegration.h"
+ 
+ #ifdef ENABLE_NLS
+ namespace
+@@ -60,6 +61,8 @@ int main(int argc, char *argv[])
+ {
+     using namespace celestia::qt;
+ 
++    initializeSteam();
++
+ #ifndef GL_ES
+     QCoreApplication::setAttribute(Qt::AA_UseDesktopOpenGL);
+ #else
+@@ -145,5 +148,6 @@ int main(int argc, char *argv[])
+ 
+     int ret = app.exec();
+     QDesktopServices::unsetUrlHandler("cel");
++    shutdownSteam();
+     return ret;
+ }
+diff --git a/src/celestia/qt/steamintegration.cpp b/src/celestia/qt/steamintegration.cpp
+new file mode 100644
+index 00000000..d2a04d43
+--- /dev/null
++++ b/src/celestia/qt/steamintegration.cpp
+@@ -0,0 +1,112 @@
++// steamintegration.cpp
++//
++// Copyright (C) 2026-present, the Celestia Development Team
++//
++// This program is free software; you can redistribute it and/or
++// modify it under the terms of the GNU General Public License
++// as published by the Free Software Foundation; either version 2
++// of the License, or (at your option) any later version.
++
++#include "steamintegration.h"
++
++#ifdef USE_STEAM
++#include <algorithm>
++#include <system_error>
++#include <steam/steam_api.h>
++#endif
++
++namespace celestia::qt
++{
++
++#ifdef USE_STEAM
++namespace
++{
++bool g_steamInitialized = false;
++} // anonymous namespace
++#endif
++
++bool
++initializeSteam()
++{
++#ifdef USE_STEAM
++    g_steamInitialized = SteamAPI_Init();
++    return g_steamInitialized;
++#else
++    return false;
++#endif
++}
++
++void
++shutdownSteam()
++{
++#ifdef USE_STEAM
++    if (g_steamInitialized)
++    {
++        SteamAPI_Shutdown();
++        g_steamInitialized = false;
++    }
++#endif
++}
++
++std::vector<std::filesystem::path>
++getSteamWorkshopExtrasDirs()
++{
++    std::vector<std::filesystem::path> dirs;
++#ifdef USE_STEAM
++    if (!g_steamInitialized)
++        return dirs;
++
++    auto* ugc = SteamUGC();
++    if (ugc == nullptr)
++        return dirs;
++
++    const uint32 count = ugc->GetNumSubscribedItems();
++    if (count == 0)
++        return dirs;
++
++    std::vector<PublishedFileId_t> items(count);
++    const uint32 fetched = ugc->GetSubscribedItems(items.data(), count);
++
++    // Each subscribed Workshop item is expected to contain a single
++    // UUID-named top-level directory holding the actual add-on content.
++    // Collect those UUID directories and return them sorted ascending by
++    // UUID so the load order is deterministic across runs and machines.
++    char installPath[1024];
++    for (uint32 i = 0; i < fetched; ++i)
++    {
++        uint64 sizeOnDisk = 0;
++        uint32 timestamp = 0;
++        if (!ugc->GetItemInstallInfo(items[i],
++                                     &sizeOnDisk,
++                                     installPath,
++                                     sizeof(installPath),
++                                     &timestamp))
++        {
++            continue;
++        }
++
++        std::error_code ec;
++        std::filesystem::path basePath{installPath};
++        if (!std::filesystem::is_directory(basePath, ec) || ec)
++            continue;
++
++        for (const auto& entry : std::filesystem::directory_iterator(basePath, ec))
++        {
++            if (ec)
++                break;
++            std::error_code entryEc;
++            if (entry.is_directory(entryEc) && !entryEc)
++                dirs.push_back(entry.path());
++        }
++    }
++
++    std::sort(dirs.begin(), dirs.end(),
++              [](const std::filesystem::path& a, const std::filesystem::path& b)
++              {
++                  return a.filename() < b.filename();
++              });
++#endif
++    return dirs;
++}
++
++} // namespace celestia::qt
+diff --git a/src/celestia/qt/steamintegration.h b/src/celestia/qt/steamintegration.h
+new file mode 100644
+index 00000000..a884ab0e
+--- /dev/null
++++ b/src/celestia/qt/steamintegration.h
+@@ -0,0 +1,28 @@
++// steamintegration.h
++//
++// Copyright (C) 2026-present, the Celestia Development Team
++//
++// Optional Steamworks SDK integration for the Qt6 front-end. When the build
++// is configured with -DENABLE_STEAM=ON, these functions wrap SteamAPI_Init,
++// SteamAPI_Shutdown, and the Workshop content directory query. When the
++// build is configured without USE_STEAM, every function is a no-op and the
++// Steam SDK is not linked.
++//
++// This program is free software; you can redistribute it and/or
++// modify it under the terms of the GNU General Public License
++// as published by the Free Software Foundation; either version 2
++// of the License, or (at your option) any later version.
++
++#pragma once
++
++#include <filesystem>
++#include <vector>
++
++namespace celestia::qt
++{
++
++bool initializeSteam();
++void shutdownSteam();
++std::vector<std::filesystem::path> getSteamWorkshopExtrasDirs();
++
++} // namespace celestia::qt

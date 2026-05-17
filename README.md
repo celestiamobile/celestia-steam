@@ -59,7 +59,17 @@ Steam concerns. Each patch in `patches/` is numbered and applied in order via
 
 Current patches:
 
-- *(none yet)*
+- `0001-integrate-steamworks-sdk-in-qt6-build.patch` — adds the
+  `ENABLE_STEAM` CMake option, a `FindSteamworks.cmake` module, and wires
+  the SDK (headers, import library, runtime DLL install) into the qt6
+  target.
+- `0002-init-steamsdk-and-append-workshop-extras-dirs.patch` — adds
+  `src/celestia/qt/steamintegration.{cpp,h}` which initialises the
+  Steamworks SDK at startup and enumerates the user's subscribed Workshop
+  items. Each Workshop item is expected to contain a single top-level
+  UUID-named directory; those directories are appended to the
+  `extrasDirectories` list passed to `CelestiaCore::initSimulation`,
+  ordered by UUID ascending for deterministic load order.
 
 ## SteamPipe
 
