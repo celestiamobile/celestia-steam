@@ -69,9 +69,12 @@ Current patches:
   `src/celestia/qt/steamintegration.{cpp,h}` which initialises the
   Steamworks SDK at startup and enumerates the user's subscribed Workshop
   items. Each Workshop item is expected to contain a single top-level
-  UUID-named directory; those directories are appended to the
+  UUID-named directory; those directories are **prepended** to the
   `extrasDirectories` list passed to `CelestiaCore::initSimulation`,
-  ordered by UUID ascending for deterministic load order.
+  ordered by UUID ascending. Prepending lets command-line `--extrasdir`
+  entries (and, downstream, base content from `celestia.cfg`) take
+  precedence on catalog conflicts — Workshop mods can't accidentally
+  redefine stock objects.
 - `0003-select-bundled-noto-font-by-ui-language.patch` — after
   `appCore->initRenderer` in the Qt6 GL widget, picks regular + bold
   Noto fonts from `fonts/` based on the active gettext language

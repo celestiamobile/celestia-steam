@@ -19,7 +19,7 @@ index 079ecb68..7aea593c 100644
    )
  
 diff --git a/src/celestia/qt/qtappwin.cpp b/src/celestia/qt/qtappwin.cpp
-index 8227c87d..b1180fbf 100644
+index 8227c87d..df9cab96 100644
 --- a/src/celestia/qt/qtappwin.cpp
 +++ b/src/celestia/qt/qtappwin.cpp
 @@ -97,6 +97,7 @@
@@ -30,19 +30,20 @@ index 8227c87d..b1180fbf 100644
  
  #ifdef _WIN32
  #include <QRect>
-@@ -282,6 +283,12 @@ CelestiaAppWindow::init(const CelestiaCommandLineOptions& options)
+@@ -277,8 +278,11 @@ CelestiaAppWindow::init(const CelestiaCommandLineOptions& options)
+     if (!options.configFileName.isEmpty())
+         configFileName = QStringToPath(options.configFileName);
+ 
+-    // Translate extras directories from QString to std::filesystem::path
+-    std::vector<std::filesystem::path> extrasDirectories;
++    // Prepend any Steam Workshop content directories the user has subscribed
++    // to. Putting Workshop dirs ahead of the command-line --extrasdir entries
++    // means user-provided extras take precedence on catalog conflicts, which
++    // limits the blast radius if a Workshop mod redefines stock objects.
++    std::vector<std::filesystem::path> extrasDirectories = getSteamWorkshopExtrasDirs();
      for (const auto& dir : options.extrasDirectories)
          extrasDirectories.push_back(QStringToPath(dir));
  
-+    // Append any Steam Workshop content directories the user has subscribed to.
-+    auto workshopDirs = getSteamWorkshopExtrasDirs();
-+    extrasDirectories.insert(extrasDirectories.end(),
-+                             std::make_move_iterator(workshopDirs.begin()),
-+                             std::make_move_iterator(workshopDirs.end()));
-+
-     initAppDataDirectory();
- 
-     m_appCore = new CelestiaCore();
 diff --git a/src/celestia/qt/qtmain.cpp b/src/celestia/qt/qtmain.cpp
 index 5e6cf304..6c06c004 100644
 --- a/src/celestia/qt/qtmain.cpp
