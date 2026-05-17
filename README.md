@@ -28,10 +28,10 @@ bound by Valve's
 [Steamworks SDK Access Agreement](https://partner.steamgames.com/documentation/sdk_access_agreement)
 regardless of the source.
 
-For local builds, download the SDK from
-`https://partner.steamgames.com/downloads/steamworks_sdk_164.zip` (requires
-partner login) and extract into `steamworks_sdk/`, or clone the mirror at the
-same path.
+For local builds, either download the latest SDK from the
+[Steamworks SDK downloads page](https://partner.steamgames.com/downloads/list)
+(requires partner login) and extract into `steamworks_sdk/`, or clone the
+mirror at the same path.
 
 ## Patches
 
