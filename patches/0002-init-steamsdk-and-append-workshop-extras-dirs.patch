@@ -19,7 +19,7 @@ index 079ecb68..7aea593c 100644
    )
  
 diff --git a/src/celestia/qt/qtappwin.cpp b/src/celestia/qt/qtappwin.cpp
-index 8227c87d..df9cab96 100644
+index 8227c87d..b4ea4c27 100644
 --- a/src/celestia/qt/qtappwin.cpp
 +++ b/src/celestia/qt/qtappwin.cpp
 @@ -97,6 +97,7 @@
@@ -40,9 +40,27 @@ index 8227c87d..df9cab96 100644
 +    // to. Putting Workshop dirs ahead of the command-line --extrasdir entries
 +    // means user-provided extras take precedence on catalog conflicts, which
 +    // limits the blast radius if a Workshop mod redefines stock objects.
-+    std::vector<std::filesystem::path> extrasDirectories = getSteamWorkshopExtrasDirs();
++    std::vector<std::filesystem::path> extrasDirectories = getSteamWorkshopAddonDirs();
      for (const auto& dir : options.extrasDirectories)
          extrasDirectories.push_back(QStringToPath(dir));
+ 
+@@ -1733,6 +1737,17 @@ QMenu*
+ CelestiaAppWindow::buildScriptsMenu()
+ {
+     std::vector<ScriptMenuItem> scripts = ScanScriptsDirectory("scripts", false);
++
++    // Append scripts from any subscribed Workshop items whose
++    // description.json declares type == "script".
++    for (const auto& workshopScriptDir : getSteamWorkshopScriptDirs())
++    {
++        auto workshopScripts = ScanScriptsDirectory(workshopScriptDir, false);
++        scripts.insert(scripts.end(),
++                       std::make_move_iterator(workshopScripts.begin()),
++                       std::make_move_iterator(workshopScripts.end()));
++    }
++
+     if (scripts.empty())
+         return nullptr;
  
 diff --git a/src/celestia/qt/qtmain.cpp b/src/celestia/qt/qtmain.cpp
 index 5e6cf304..6c06c004 100644
@@ -74,10 +92,10 @@ index 5e6cf304..6c06c004 100644
  }
 diff --git a/src/celestia/qt/steamintegration.cpp b/src/celestia/qt/steamintegration.cpp
 new file mode 100644
-index 00000000..d2a04d43
+index 00000000..833205d9
 --- /dev/null
 +++ b/src/celestia/qt/steamintegration.cpp
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,182 @@
 +// steamintegration.cpp
 +//
 +// Copyright (C) 2026-present, the Celestia Development Team
@@ -91,7 +109,18 @@ index 00000000..d2a04d43
 +
 +#ifdef USE_STEAM
 +#include <algorithm>
++#include <optional>
 +#include <system_error>
++
++#include <QByteArray>
++#include <QFile>
++#include <QIODevice>
++#include <QJsonDocument>
++#include <QJsonObject>
++#include <QJsonParseError>
++#include <QJsonValue>
++#include <QString>
++
 +#include <steam/steam_api.h>
 +#endif
 +
@@ -102,6 +131,106 @@ index 00000000..d2a04d43
 +namespace
 +{
 +bool g_steamInitialized = false;
++
++// Validate a Workshop item's install path and return the path of the
++// content directory if the layout matches `wantType`. A valid Workshop
++// item must contain a description.json at its root with:
++//   * "id"   — a non-empty string, also the name of a sibling directory
++//   * "type" — equal to wantType (currently "addon" or "script")
++// Items whose description.json is missing, malformed, or whose type
++// doesn't match are skipped.
++std::optional<std::filesystem::path>
++extractTypedDir(const std::filesystem::path& installPath, QStringView wantType)
++{
++    std::error_code ec;
++    if (!std::filesystem::is_directory(installPath, ec) || ec)
++        return std::nullopt;
++
++    const auto descPath = installPath / "description.json";
++    if (!std::filesystem::is_regular_file(descPath, ec) || ec)
++        return std::nullopt;
++
++    QFile descFile(QString::fromStdString(descPath.string()));
++    if (!descFile.open(QIODevice::ReadOnly))
++        return std::nullopt;
++
++    const QByteArray bytes = descFile.readAll();
++    descFile.close();
++
++    QJsonParseError parseError{};
++    const QJsonDocument doc = QJsonDocument::fromJson(bytes, &parseError);
++    if (parseError.error != QJsonParseError::NoError || !doc.isObject())
++        return std::nullopt;
++
++    const QJsonObject obj = doc.object();
++    const QJsonValue idValue = obj.value(QStringLiteral("id"));
++    const QJsonValue typeValue = obj.value(QStringLiteral("type"));
++    if (!idValue.isString() || !typeValue.isString())
++        return std::nullopt;
++
++    if (typeValue.toString() != wantType)
++        return std::nullopt;
++
++    const QString id = idValue.toString();
++    if (id.isEmpty())
++        return std::nullopt;
++
++    std::filesystem::path candidate = installPath / id.toStdString();
++    if (!std::filesystem::is_directory(candidate, ec) || ec)
++        return std::nullopt;
++
++    return candidate;
++}
++
++// Walk the user's subscribed Workshop items and return the local content
++// directories whose description.json declares the given `wantType`,
++// sorted ascending by ID for deterministic order.
++std::vector<std::filesystem::path>
++collectWorkshopDirs(QStringView wantType)
++{
++    std::vector<std::filesystem::path> dirs;
++    if (!g_steamInitialized)
++        return dirs;
++
++    auto* ugc = SteamUGC();
++    if (ugc == nullptr)
++        return dirs;
++
++    const uint32 count = ugc->GetNumSubscribedItems();
++    if (count == 0)
++        return dirs;
++
++    std::vector<PublishedFileId_t> items(count);
++    const uint32 fetched = ugc->GetSubscribedItems(items.data(), count);
++
++    char installPath[1024];
++    for (uint32 i = 0; i < fetched; ++i)
++    {
++        uint64 sizeOnDisk = 0;
++        uint32 timestamp = 0;
++        if (!ugc->GetItemInstallInfo(items[i],
++                                     &sizeOnDisk,
++                                     installPath,
++                                     sizeof(installPath),
++                                     &timestamp))
++        {
++            continue;
++        }
++
++        if (auto contentDir = extractTypedDir(std::filesystem::path{installPath}, wantType);
++            contentDir.has_value())
++        {
++            dirs.push_back(std::move(*contentDir));
++        }
++    }
++
++    std::sort(dirs.begin(), dirs.end(),
++              [](const std::filesystem::path& a, const std::filesystem::path& b)
++              {
++                  return a.filename() < b.filename();
++              });
++    return dirs;
++}
 +} // anonymous namespace
 +#endif
 +
@@ -129,73 +258,32 @@ index 00000000..d2a04d43
 +}
 +
 +std::vector<std::filesystem::path>
-+getSteamWorkshopExtrasDirs()
++getSteamWorkshopAddonDirs()
 +{
-+    std::vector<std::filesystem::path> dirs;
 +#ifdef USE_STEAM
-+    if (!g_steamInitialized)
-+        return dirs;
-+
-+    auto* ugc = SteamUGC();
-+    if (ugc == nullptr)
-+        return dirs;
-+
-+    const uint32 count = ugc->GetNumSubscribedItems();
-+    if (count == 0)
-+        return dirs;
-+
-+    std::vector<PublishedFileId_t> items(count);
-+    const uint32 fetched = ugc->GetSubscribedItems(items.data(), count);
-+
-+    // Each subscribed Workshop item is expected to contain a single
-+    // UUID-named top-level directory holding the actual add-on content.
-+    // Collect those UUID directories and return them sorted ascending by
-+    // UUID so the load order is deterministic across runs and machines.
-+    char installPath[1024];
-+    for (uint32 i = 0; i < fetched; ++i)
-+    {
-+        uint64 sizeOnDisk = 0;
-+        uint32 timestamp = 0;
-+        if (!ugc->GetItemInstallInfo(items[i],
-+                                     &sizeOnDisk,
-+                                     installPath,
-+                                     sizeof(installPath),
-+                                     &timestamp))
-+        {
-+            continue;
-+        }
-+
-+        std::error_code ec;
-+        std::filesystem::path basePath{installPath};
-+        if (!std::filesystem::is_directory(basePath, ec) || ec)
-+            continue;
-+
-+        for (const auto& entry : std::filesystem::directory_iterator(basePath, ec))
-+        {
-+            if (ec)
-+                break;
-+            std::error_code entryEc;
-+            if (entry.is_directory(entryEc) && !entryEc)
-+                dirs.push_back(entry.path());
-+        }
-+    }
-+
-+    std::sort(dirs.begin(), dirs.end(),
-+              [](const std::filesystem::path& a, const std::filesystem::path& b)
-+              {
-+                  return a.filename() < b.filename();
-+              });
++    return collectWorkshopDirs(QStringLiteral("addon"));
++#else
++    return {};
 +#endif
-+    return dirs;
++}
++
++std::vector<std::filesystem::path>
++getSteamWorkshopScriptDirs()
++{
++#ifdef USE_STEAM
++    return collectWorkshopDirs(QStringLiteral("script"));
++#else
++    return {};
++#endif
 +}
 +
 +} // namespace celestia::qt
 diff --git a/src/celestia/qt/steamintegration.h b/src/celestia/qt/steamintegration.h
 new file mode 100644
-index 00000000..a884ab0e
+index 00000000..24936abf
 --- /dev/null
 +++ b/src/celestia/qt/steamintegration.h
-@@ -0,0 +1,28 @@
+@@ -0,0 +1,35 @@
 +// steamintegration.h
 +//
 +// Copyright (C) 2026-present, the Celestia Development Team
@@ -221,6 +309,13 @@ index 00000000..a884ab0e
 +
 +bool initializeSteam();
 +void shutdownSteam();
-+std::vector<std::filesystem::path> getSteamWorkshopExtrasDirs();
++
++// Returns the addon content directories from subscribed Workshop items
++// (description.json type == "addon"), sorted ascending by addon ID.
++std::vector<std::filesystem::path> getSteamWorkshopAddonDirs();
++
++// Returns the script content directories from subscribed Workshop items
++// (description.json type == "script"), sorted ascending by script ID.
++std::vector<std::filesystem::path> getSteamWorkshopScriptDirs();
 +
 +} // namespace celestia::qt

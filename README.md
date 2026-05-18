@@ -68,13 +68,15 @@ Current patches:
 - `0002-init-steamsdk-and-append-workshop-extras-dirs.patch` — adds
   `src/celestia/qt/steamintegration.{cpp,h}` which initialises the
   Steamworks SDK at startup and enumerates the user's subscribed Workshop
-  items. Each Workshop item is expected to contain a single top-level
-  UUID-named directory; those directories are **prepended** to the
-  `extrasDirectories` list passed to `CelestiaCore::initSimulation`,
-  ordered by UUID ascending. Prepending lets command-line `--extrasdir`
-  entries (and, downstream, base content from `celestia.cfg`) take
-  precedence on catalog conflicts — Workshop mods can't accidentally
-  redefine stock objects.
+  items. Each Workshop item must contain a `description.json` at its
+  root with `id` and `type` keys; `id` names a sibling directory holding
+  the actual content. Items with `type == "addon"` are prepended to the
+  `extrasDirectories` list passed to `CelestiaCore::initSimulation`
+  (sorted ascending by ID for deterministic load order). Items with
+  `type == "script"` are appended to the Qt6 Scripts menu via
+  `CelestiaAppWindow::buildScriptsMenu`. Items missing or with malformed
+  `description.json`, or whose ID directory doesn't exist, are silently
+  skipped.
 - `0003-select-bundled-noto-font-by-ui-language.patch` — after
   `appCore->initRenderer` in the Qt6 GL widget, picks regular + bold
   Noto fonts from `fonts/` based on the active gettext language
