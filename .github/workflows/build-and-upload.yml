@@ -57,15 +57,30 @@ jobs:
 
     - name: Setup NuGet credentials
       shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        $nugetCmd = vcpkg fetch nuget | Select-Object -Last 1
-        $nugetSource = 'https://nuget.pkg.github.com/celestiamobile/index.json'
-        & "$nugetCmd" sources add `
-          -Source "$nugetSource" `
-          -StorePasswordInClearText `
-          -Name "GitHub" `
-          -Username 'celestiamobile' `
-          -Password '${{secrets.GITHUB_TOKEN}}'
+        # Write NuGet.Config directly so every nuget.exe instance on the
+        # runner (vcpkg-fetched, chocolatey, system) picks up the same
+        # credentials. The "nuget sources add" approach was flaky on the
+        # windows-2025-vs2026 image because vcpkg's push step ends up
+        # invoking a different nuget.exe than the one we configured.
+        $nugetConfig = "$env:APPDATA\NuGet\NuGet.Config"
+        New-Item -ItemType Directory -Force -Path (Split-Path $nugetConfig) | Out-Null
+        @"
+        <?xml version="1.0" encoding="utf-8"?>
+        <configuration>
+          <packageSources>
+            <add key="GitHub" value="https://nuget.pkg.github.com/celestiamobile/index.json" />
+          </packageSources>
+          <packageSourceCredentials>
+            <GitHub>
+              <add key="Username" value="celestiamobile" />
+              <add key="ClearTextPassword" value="$env:GITHUB_TOKEN" />
+            </GitHub>
+          </packageSourceCredentials>
+        </configuration>
+        "@ | Out-File -FilePath $nugetConfig -Encoding utf8 -Force
 
     - name: Find ImageMagick
       shell: pwsh
