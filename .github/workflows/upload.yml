@@ -1,13 +1,17 @@
 name: Upload to Steam
 
-# Manual-only: pushes a previously-built artifact to SteamPipe.
-# Pick a specific Build run by ID, or leave the input blank to use the
-# latest successful Build run on the default branch.
+# Manual-only: pushes a previously-built artifact to SteamPipe via the
+# game-ci/steam-deploy action. Pick a specific Build run by ID, or leave
+# the input blank to use the latest successful Build run.
 on:
   workflow_dispatch:
     inputs:
       run_id:
         description: 'Build run ID (leave empty for latest successful Build run)'
+        required: false
+        default: ''
+      release_branch:
+        description: 'Steam branch to set live (empty = leave on default, do not auto-promote)'
         required: false
         default: ''
 
@@ -60,32 +64,13 @@ jobs:
         run-id: ${{ steps.resolve_run.outputs.run_id }}
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install SteamCMD
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y lib32gcc-s1
-        mkdir -p ~/steamcmd
-        cd ~/steamcmd
-        curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxvf -
-
-    - name: Restore Steam Guard session
-      env:
-        STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
-      run: |
-        # Decode the previously-authenticated config.vdf into both Steam
-        # config locations on Linux. Different steamcmd builds look in
-        # different places; writing to both is the safest pattern.
-        mkdir -p ~/Steam/config ~/.steam/steam/config
-        echo "$STEAM_CONFIG_VDF" | base64 -d > ~/Steam/config/config.vdf
-        cp ~/Steam/config/config.vdf ~/.steam/steam/config/config.vdf
-        chmod 600 ~/Steam/config/config.vdf ~/.steam/steam/config/config.vdf
-
-    - name: Upload via SteamPipe
-      env:
-        STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
-        STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
-      run: |
-        ~/steamcmd/steamcmd.sh \
-          +login "$STEAM_USERNAME" "$STEAM_PASSWORD" \
-          +run_app_build "${{github.workspace}}/steampipe/app_build.vdf" \
-          +quit
+    - name: Upload to Steam
+      uses: game-ci/steam-deploy@v3
+      with:
+        username: ${{ secrets.STEAM_USERNAME }}
+        configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+        appId: '4753420'
+        buildDescription: 'celestia-steam build ${{ steps.resolve_run.outputs.run_id }} (${{ github.sha }})'
+        rootPath: content
+        depot1Path: '.'
+        releaseBranch: ${{ inputs.release_branch }}
