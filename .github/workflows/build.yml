@@ -1,16 +1,9 @@
-name: Build and Upload to Steam
+name: Build
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      upload_to_steam:
-        description: 'Upload build to Steam (requires App ID + creds)'
-        required: false
-        default: 'false'
-        type: choice
-        options: ['false', 'true']
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -228,49 +221,3 @@ jobs:
         if-no-files-found: error
         retention-days: 10
         path: output/
-
-  upload-to-steam:
-    name: "Upload to SteamPipe"
-    needs: build
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_to_steam == 'true' }}
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout celestia-steam
-      uses: actions/checkout@v6
-
-    - name: Download build artifact
-      uses: actions/download-artifact@v5
-      with:
-        name: celestia-steam-build
-        path: content
-
-    - name: Install SteamCMD
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y lib32gcc-s1
-        mkdir -p ~/steamcmd
-        cd ~/steamcmd
-        curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxvf -
-
-    - name: Restore Steam Guard session
-      env:
-        STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
-      run: |
-        # Decode the previously-authenticated config.vdf into both Steam
-        # config locations on Linux. Different steamcmd builds look in
-        # different places; writing to both is the safest pattern.
-        mkdir -p ~/Steam/config ~/.steam/steam/config
-        echo "$STEAM_CONFIG_VDF" | base64 -d > ~/Steam/config/config.vdf
-        cp ~/Steam/config/config.vdf ~/.steam/steam/config/config.vdf
-        chmod 600 ~/Steam/config/config.vdf ~/.steam/steam/config/config.vdf
-
-    - name: Upload via SteamPipe
-      env:
-        STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
-        STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
-      run: |
-        ~/steamcmd/steamcmd.sh \
-          +login "$STEAM_USERNAME" "$STEAM_PASSWORD" \
-          +run_app_build "${{github.workspace}}/steampipe/app_build.vdf" \
-          +quit

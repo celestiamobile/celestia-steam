@@ -1,0 +1,91 @@
+name: Upload to Steam
+
+# Manual-only: pushes a previously-built artifact to SteamPipe.
+# Pick a specific Build run by ID, or leave the input blank to use the
+# latest successful Build run on the default branch.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Build run ID (leave empty for latest successful Build run)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    name: "Upload to SteamPipe"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+    - name: Checkout celestia-steam
+      uses: actions/checkout@v6
+
+    - name: Resolve Build run ID
+      id: resolve_run
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        if [ -n "${{ inputs.run_id }}" ]; then
+          RUN_ID='${{ inputs.run_id }}'
+          echo "Using explicitly provided run ID: $RUN_ID"
+        else
+          RUN_ID=$(gh run list \
+            --workflow=build.yml \
+            --repo ${{ github.repository }} \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+          echo "Resolved latest successful Build run: $RUN_ID"
+        fi
+        if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+          echo "::error::Could not determine a Build run ID — has Build ever succeeded?"
+          exit 1
+        fi
+        echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+    - name: Download build artifact
+      uses: actions/download-artifact@v5
+      with:
+        name: celestia-steam-build
+        path: content
+        run-id: ${{ steps.resolve_run.outputs.run_id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Install SteamCMD
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lib32gcc-s1
+        mkdir -p ~/steamcmd
+        cd ~/steamcmd
+        curl -sqL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxvf -
+
+    - name: Restore Steam Guard session
+      env:
+        STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+      run: |
+        # Decode the previously-authenticated config.vdf into both Steam
+        # config locations on Linux. Different steamcmd builds look in
+        # different places; writing to both is the safest pattern.
+        mkdir -p ~/Steam/config ~/.steam/steam/config
+        echo "$STEAM_CONFIG_VDF" | base64 -d > ~/Steam/config/config.vdf
+        cp ~/Steam/config/config.vdf ~/.steam/steam/config/config.vdf
+        chmod 600 ~/Steam/config/config.vdf ~/.steam/steam/config/config.vdf
+
+    - name: Upload via SteamPipe
+      env:
+        STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+        STEAM_PASSWORD: ${{ secrets.STEAM_PASSWORD }}
+      run: |
+        ~/steamcmd/steamcmd.sh \
+          +login "$STEAM_USERNAME" "$STEAM_PASSWORD" \
+          +run_app_build "${{github.workspace}}/steampipe/app_build.vdf" \
+          +quit
