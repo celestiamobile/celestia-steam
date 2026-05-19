@@ -1,6 +1,6 @@
 "appbuild"
 {
-    "appid"        "APPID_PLACEHOLDER"
+    "appid"        "4753420"
     "desc"         "Celestia"
     "buildoutput"  "..\output\"
     "contentroot"  "..\content\"
@@ -10,6 +10,6 @@
 
     "depots"
     {
-        "DEPOT_PLACEHOLDER" "depot.vdf"
+        "4753421" "depot.vdf"
     }
 }

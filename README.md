@@ -87,11 +87,10 @@ Current patches:
 
 ## SteamPipe
 
-The Steam App ID is configured in `steampipe/app_build.vdf`. Until the app is
-created in the Steamworks partner dashboard, the placeholder `APPID_PLACEHOLDER`
-is used and CI's upload step is disabled.
-
-Depot IDs are placeholders likewise.
+The Steam App ID is **4753420** and the Windows depot is **4753421**, both
+configured in `steampipe/app_build.vdf` and `steampipe/depot.vdf`. CI's
+upload step is still gated on a `workflow_dispatch` input plus the
+`STEAM_USERNAME`, `STEAM_PASSWORD`, and Steam Guard `config.vdf` secrets.
 
 ## Building locally
 
