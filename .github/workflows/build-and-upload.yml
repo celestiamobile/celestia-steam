@@ -60,14 +60,13 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Write NuGet.Config to both per-user and machine-wide locations so
-        # every nuget.exe instance on the runner picks up the same creds,
-        # no matter which one vcpkg's binary cache invokes.
-        $userConfig    = "$env:APPDATA\NuGet\NuGet.Config"
-        $machineConfig = "$env:ProgramData\NuGet\Config\NuGet.Config"
-        New-Item -ItemType Directory -Force -Path (Split-Path $userConfig)    | Out-Null
-        New-Item -ItemType Directory -Force -Path (Split-Path $machineConfig) | Out-Null
-
+        # Write NuGet.Config to the per-user location so every nuget.exe
+        # instance on the runner picks up the same credentials. Auth is
+        # then handled at the feed level; package-level conflicts are
+        # avoided by using the celestia-steam-specific triplet name (see
+        # triplets/x64-windows-release-steam.cmake).
+        $userConfig = "$env:APPDATA\NuGet\NuGet.Config"
+        New-Item -ItemType Directory -Force -Path (Split-Path $userConfig) | Out-Null
         $token = $env:GITHUB_TOKEN
         $configXml = @"
         <?xml version="1.0" encoding="utf-8"?>
@@ -83,54 +82,7 @@ jobs:
           </packageSourceCredentials>
         </configuration>
         "@
-
-        # PowerShell 7's Out-File defaults to UTF-8 without BOM; force it
-        # explicitly to avoid the BOM that PS5.1 would add. Some nuget
-        # versions choke on the BOM.
-        [System.IO.File]::WriteAllText($userConfig,    $configXml, [System.Text.UTF8Encoding]::new($false))
-        [System.IO.File]::WriteAllText($machineConfig, $configXml, [System.Text.UTF8Encoding]::new($false))
-
-        # Diagnostic: verify the config landed and that nuget sees the source.
-        Write-Host "User config path:    $userConfig"
-        Write-Host "Machine config path: $machineConfig"
-        Write-Host "User config exists:    $(Test-Path $userConfig)"
-        Write-Host "Machine config exists: $(Test-Path $machineConfig)"
-        Write-Host "--- User config contents (token redacted) ---"
-        (Get-Content $userConfig -Raw) -replace [regex]::Escape($token), '***REDACTED***'
-        Write-Host "--- nuget sources list ---"
-        $nugetCmd = vcpkg fetch nuget | Select-Object -Last 1
-        Write-Host "Using nuget at: $nugetCmd"
-        & "$nugetCmd" sources list 2>&1
-        Write-Host "--- nuget config -AsPath (which configs are loaded) ---"
-        & "$nugetCmd" config -AsPath 2>&1
-
-        Write-Host "--- direct auth test against the feed (no nuget) ---"
-        # GitHub Packages NuGet endpoint accepts Basic auth: base64("user:token").
-        # 200/OK or 404/NotFound from the index means auth works.
-        # 401/Unauthorized means the token+username combo is rejected.
-        # 403/Forbidden means auth is fine but no permission to act on the resource.
-        $pair  = "celestiamobile:$token"
-        $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
-        $b64   = [System.Convert]::ToBase64String($bytes)
-        try {
-            $resp = Invoke-WebRequest `
-                -Uri 'https://nuget.pkg.github.com/celestiamobile/index.json' `
-                -Headers @{ 'Authorization' = "Basic $b64" } `
-                -UseBasicParsing
-            Write-Host "Status: $($resp.StatusCode) $($resp.StatusDescription)"
-        } catch {
-            Write-Host "Status: $($_.Exception.Response.StatusCode.value__) $($_.Exception.Response.StatusDescription)"
-        }
-        try {
-            $resp = Invoke-WebRequest `
-                -Uri 'https://nuget.pkg.github.com/celestiamobile/index.json' `
-                -Headers @{ 'Authorization' = "Basic $b64" } `
-                -Method PUT `
-                -UseBasicParsing
-            Write-Host "PUT status: $($resp.StatusCode)"
-        } catch {
-            Write-Host "PUT status: $($_.Exception.Response.StatusCode.value__) $($_.Exception.Response.StatusDescription)"
-        }
+        [System.IO.File]::WriteAllText($userConfig, $configXml, [System.Text.UTF8Encoding]::new($false))
 
     - name: Find ImageMagick
       shell: pwsh
@@ -179,9 +131,13 @@ jobs:
           'qtbase[core,opengl,widgets,freetype,harfbuzz,jpeg,png]'
         )
 
-        $triplet = 'x64-windows-release'
+        # The celestia-steam-specific triplet keeps our NuGet packages
+        # under a distinct name from celestia-170's (otherwise the cache
+        # push 403s because celestia-170 owns the packages).
+        $triplet = 'x64-windows-release-steam'
         pushd "$env:VCPKG_INSTALLATION_ROOT"
         ./vcpkg.exe --overlay-triplets=${{github.workspace}}/celestia/windows/vcpkg-triplets `
+                    --overlay-triplets=${{github.workspace}}/triplets `
                     --triplet="$triplet" `
                     --host-triplet="$triplet" `
                     install --recurse @packages
@@ -190,11 +146,11 @@ jobs:
     - name: Configure CMake
       shell: pwsh
       run: |
-        $triplet = 'x64-windows-release'
+        $triplet = 'x64-windows-release-steam'
         cmake -B '${{github.workspace}}/build' `
               -S '${{github.workspace}}/celestia' `
               -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-              -DVCPKG_OVERLAY_TRIPLETS="${{github.workspace}}/celestia/windows/vcpkg-triplets" `
+              -DVCPKG_OVERLAY_TRIPLETS="${{github.workspace}}/celestia/windows/vcpkg-triplets;${{github.workspace}}/triplets" `
               -DVCPKG_TARGET_TRIPLET="$triplet" `
               -DCMAKE_GENERATOR_PLATFORM='x64' `
               -DCMAKE_INSTALL_PREFIX="${{github.workspace}}/install" `
@@ -231,10 +187,10 @@ jobs:
     - name: Install CelestiaContent
       shell: pwsh
       run: |
-        $triplet = 'x64-windows-release'
+        $triplet = 'x64-windows-release-steam'
         cmake -S ${{github.workspace}}/content -B ${{github.workspace}}/content/build `
               -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-              -DVCPKG_OVERLAY_TRIPLETS="${{github.workspace}}/celestia/windows/vcpkg-triplets" `
+              -DVCPKG_OVERLAY_TRIPLETS="${{github.workspace}}/celestia/windows/vcpkg-triplets;${{github.workspace}}/triplets" `
               -DVCPKG_TARGET_TRIPLET="$triplet" `
               -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install `
               -DImageMagick_magick_EXECUTABLE="$env:ImageMagick_HOME/magick.exe" `
@@ -245,7 +201,7 @@ jobs:
     - name: Run windeployqt
       shell: pwsh
       run: |
-        $triplet = 'x64-windows-release'
+        $triplet = 'x64-windows-release-steam'
         $windeployqt = "$env:VCPKG_INSTALLATION_ROOT/installed/$triplet/tools/Qt6/bin/windeployqt.exe"
         & $windeployqt "${{github.workspace}}/install/celestia-qt6.exe"
 
