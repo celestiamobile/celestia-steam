@@ -60,14 +60,16 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # Write NuGet.Config directly so every nuget.exe instance on the
-        # runner (vcpkg-fetched, chocolatey, system) picks up the same
-        # credentials. The "nuget sources add" approach was flaky on the
-        # windows-2025-vs2026 image because vcpkg's push step ends up
-        # invoking a different nuget.exe than the one we configured.
-        $nugetConfig = "$env:APPDATA\NuGet\NuGet.Config"
-        New-Item -ItemType Directory -Force -Path (Split-Path $nugetConfig) | Out-Null
-        @"
+        # Write NuGet.Config to both per-user and machine-wide locations so
+        # every nuget.exe instance on the runner picks up the same creds,
+        # no matter which one vcpkg's binary cache invokes.
+        $userConfig    = "$env:APPDATA\NuGet\NuGet.Config"
+        $machineConfig = "$env:ProgramData\NuGet\Config\NuGet.Config"
+        New-Item -ItemType Directory -Force -Path (Split-Path $userConfig)    | Out-Null
+        New-Item -ItemType Directory -Force -Path (Split-Path $machineConfig) | Out-Null
+
+        $token = $env:GITHUB_TOKEN
+        $configXml = @"
         <?xml version="1.0" encoding="utf-8"?>
         <configuration>
           <packageSources>
@@ -76,11 +78,31 @@ jobs:
           <packageSourceCredentials>
             <GitHub>
               <add key="Username" value="celestiamobile" />
-              <add key="ClearTextPassword" value="$env:GITHUB_TOKEN" />
+              <add key="ClearTextPassword" value="$token" />
             </GitHub>
           </packageSourceCredentials>
         </configuration>
-        "@ | Out-File -FilePath $nugetConfig -Encoding utf8 -Force
+        "@
+
+        # PowerShell 7's Out-File defaults to UTF-8 without BOM; force it
+        # explicitly to avoid the BOM that PS5.1 would add. Some nuget
+        # versions choke on the BOM.
+        [System.IO.File]::WriteAllText($userConfig,    $configXml, [System.Text.UTF8Encoding]::new($false))
+        [System.IO.File]::WriteAllText($machineConfig, $configXml, [System.Text.UTF8Encoding]::new($false))
+
+        # Diagnostic: verify the config landed and that nuget sees the source.
+        Write-Host "User config path:    $userConfig"
+        Write-Host "Machine config path: $machineConfig"
+        Write-Host "User config exists:    $(Test-Path $userConfig)"
+        Write-Host "Machine config exists: $(Test-Path $machineConfig)"
+        Write-Host "--- User config contents (token redacted) ---"
+        (Get-Content $userConfig -Raw) -replace [regex]::Escape($token), '***REDACTED***'
+        Write-Host "--- nuget sources list ---"
+        $nugetCmd = vcpkg fetch nuget | Select-Object -Last 1
+        Write-Host "Using nuget at: $nugetCmd"
+        & "$nugetCmd" sources list 2>&1
+        Write-Host "--- nuget config -AsPath (which configs are loaded) ---"
+        & "$nugetCmd" config -AsPath 2>&1
 
     - name: Find ImageMagick
       shell: pwsh
