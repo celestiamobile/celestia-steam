@@ -104,6 +104,34 @@ jobs:
         Write-Host "--- nuget config -AsPath (which configs are loaded) ---"
         & "$nugetCmd" config -AsPath 2>&1
 
+        Write-Host "--- direct auth test against the feed (no nuget) ---"
+        # GitHub Packages NuGet endpoint accepts Basic auth: base64("user:token").
+        # 200/OK or 404/NotFound from the index means auth works.
+        # 401/Unauthorized means the token+username combo is rejected.
+        # 403/Forbidden means auth is fine but no permission to act on the resource.
+        $pair  = "celestiamobile:$token"
+        $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+        $b64   = [System.Convert]::ToBase64String($bytes)
+        try {
+            $resp = Invoke-WebRequest `
+                -Uri 'https://nuget.pkg.github.com/celestiamobile/index.json' `
+                -Headers @{ 'Authorization' = "Basic $b64" } `
+                -UseBasicParsing
+            Write-Host "Status: $($resp.StatusCode) $($resp.StatusDescription)"
+        } catch {
+            Write-Host "Status: $($_.Exception.Response.StatusCode.value__) $($_.Exception.Response.StatusDescription)"
+        }
+        try {
+            $resp = Invoke-WebRequest `
+                -Uri 'https://nuget.pkg.github.com/celestiamobile/index.json' `
+                -Headers @{ 'Authorization' = "Basic $b64" } `
+                -Method PUT `
+                -UseBasicParsing
+            Write-Host "PUT status: $($resp.StatusCode)"
+        } catch {
+            Write-Host "PUT status: $($_.Exception.Response.StatusCode.value__) $($_.Exception.Response.StatusDescription)"
+        }
+
     - name: Find ImageMagick
       shell: pwsh
       run: |
