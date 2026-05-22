@@ -3,7 +3,8 @@
 	url = https://github.com/rlabrecque/SteamworksSDK.git
 [submodule "celestia"]
 	path = celestia
-	url = https://github.com/CelestiaProject/Celestia.git
+	url = https://github.com/celestiamobile/Celestia.git
+	branch = steam
 [submodule "content"]
 	path = content
 	url = https://github.com/CelestiaProject/CelestiaContent.git

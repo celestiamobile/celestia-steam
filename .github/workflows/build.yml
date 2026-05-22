@@ -33,10 +33,6 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Apply celestia-steam patches
-      shell: bash
-      run: scripts/apply-patches.sh
-
     - name: Update vcpkg
       shell: pwsh
       run: |
@@ -197,13 +193,6 @@ jobs:
         $triplet = 'x64-windows-release-steam'
         $windeployqt = "$env:VCPKG_INSTALLATION_ROOT/installed/$triplet/tools/Qt6/bin/windeployqt.exe"
         & $windeployqt "${{github.workspace}}/install/celestia-qt6.exe"
-
-    - name: Deploy bundled Noto fonts
-      shell: pwsh
-      run: |
-        $dest = "${{github.workspace}}/install/fonts"
-        New-Item -ItemType Directory -Force -Path $dest | Out-Null
-        Copy-Item -Path "${{github.workspace}}/fonts/*" -Destination $dest -Force
 
     - name: Stage SteamPipe content
       shell: pwsh
