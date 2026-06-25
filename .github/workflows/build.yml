@@ -113,6 +113,7 @@ jobs:
           'freetype',
           'gettext[tools]',
           'gperf',
+          'icu',
           'libepoxy',
           'libjpeg-turbo',
           'libpng',
@@ -156,7 +157,7 @@ jobs:
               -DENABLE_STEAM=ON         `
               -DSTEAMWORKS_SDK_ROOT="${{github.workspace}}/steamworks_sdk" `
               -DUSE_ICU=ON              `
-              -DUSE_WIN_ICU=ON
+              -DUSE_WIN_ICU=OFF
 
     - name: Build
       shell: pwsh
