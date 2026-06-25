@@ -118,7 +118,7 @@ jobs:
           'libjpeg-turbo',
           'libpng',
           'luajit',
-          'qtbase[core,opengl,widgets,freetype,harfbuzz,jpeg,png,windeployqt]'
+          'qtbase[core,opengl,widgets,freetype,harfbuzz,jpeg,png,windeployqt,icu]'
         )
 
         # The celestia-steam-specific triplet keeps our NuGet packages
