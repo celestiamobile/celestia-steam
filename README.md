@@ -76,8 +76,8 @@ Configure these on the repository:
   **`SENTRY_AUTH_TOKEN`** (used by `sentry-cli` to upload symbols). With the
   auth token unset, the symbol-upload step is skipped; with the DSN unset,
   crash reporting is disabled at runtime.
-- Variables (non-secret): **`SENTRY_ORG`** and **`SENTRY_PROJECT`** slugs for
-  the `sentry-cli debug-files upload` target.
+- Variables (non-secret): the `sentry-cli` upload target is set in the
+  workflow as `SENTRY_ORG: celestia-for-steam` / `SENTRY_PROJECT: native-qt`.
 
 ## SteamPipe
 

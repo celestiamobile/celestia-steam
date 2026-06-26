@@ -26,8 +26,8 @@ jobs:
       # reliably reference its own step-level env in its `if`). sentry-cli
       # also picks these up automatically at runtime.
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
-      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+      SENTRY_ORG: celestia-for-steam
+      SENTRY_PROJECT: native-qt
 
     steps:
     - name: Disable Git line-ending conversion
