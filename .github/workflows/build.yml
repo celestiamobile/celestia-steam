@@ -247,11 +247,19 @@ jobs:
         # dependencies symbolicate. sentry-cli scans recursively and pairs each
         # binary with its PDB by debug-id, so we point it at the build trees
         # (our PDBs + sentry/crashpad PDBs) and the deployed runtime.
+        #
+        # The deployed runtime (output/) only contains DLLs — windeployqt and
+        # our packaging never copy the matching PDBs — so crashes inside Qt and
+        # the other vcpkg dependencies (e.g. the qwindows platform plugin) only
+        # resolve to the nearest export. The vcpkg installed tree keeps each
+        # DLL's PDB next to it, so add it here to symbolicate third-party frames.
+        $triplet = 'x64-windows-release-steam'
         npm install -g @sentry/cli
         sentry-cli debug-files upload --include-sources `
           "${{github.workspace}}/build" `
           "${{github.workspace}}/sentry-build" `
-          "${{github.workspace}}/output"
+          "${{github.workspace}}/output" `
+          "$env:VCPKG_INSTALLATION_ROOT/installed/$triplet"
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v5
