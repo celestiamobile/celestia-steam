@@ -21,6 +21,14 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      # Job-level so the upload step's `if:` can read it (a step cannot
+      # reliably reference its own step-level env in its `if`). sentry-cli
+      # also picks these up automatically at runtime.
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+
     steps:
     - name: Disable Git line-ending conversion
       shell: bash
@@ -133,6 +141,29 @@ jobs:
                     install --recurse @packages
         popd
 
+    - name: Build Sentry SDK
+      shell: pwsh
+      run: |
+        # Build sentry-native from the pinned submodule with the crashpad
+        # backend and Qt integration (the vcpkg port does not expose the Qt
+        # integration, so we build it from source). It is pointed at vcpkg's
+        # Qt6 via CMAKE_PREFIX_PATH, and installed to a prefix that the main
+        # Celestia configure step consumes via sentry_DIR.
+        $triplet = 'x64-windows-release-steam'
+        $qtPrefix = "$env:VCPKG_INSTALLATION_ROOT/installed/$triplet"
+        cmake -S '${{github.workspace}}/sentry-native' `
+              -B '${{github.workspace}}/sentry-build' `
+              -DCMAKE_GENERATOR_PLATFORM='x64' `
+              -DSENTRY_BACKEND=crashpad `
+              -DSENTRY_INTEGRATION_QT=YES `
+              -DSENTRY_BUILD_SHARED_LIBS=ON `
+              -DSENTRY_BUILD_TESTS=OFF `
+              -DSENTRY_BUILD_EXAMPLES=OFF `
+              -DCMAKE_PREFIX_PATH="$qtPrefix" `
+              -DCMAKE_INSTALL_PREFIX="${{github.workspace}}/sentry-install"
+        cmake --build '${{github.workspace}}/sentry-build' --config ${{env.BUILD_TYPE}}
+        cmake --install '${{github.workspace}}/sentry-build' --config ${{env.BUILD_TYPE}}
+
     - name: Configure CMake
       shell: pwsh
       run: |
@@ -156,6 +187,10 @@ jobs:
               -DENABLE_LTO=ON           `
               -DENABLE_STEAM=ON         `
               -DSTEAMWORKS_SDK_ROOT="${{github.workspace}}/steamworks_sdk" `
+              -DENABLE_SENTRY=ON        `
+              -DSENTRY_DSN="${{ secrets.SENTRY_DSN }}" `
+              -DSENTRY_BUILD_NUMBER="${{ github.run_number }}" `
+              -Dsentry_DIR="${{github.workspace}}/sentry-install/lib/cmake/sentry" `
               -DUSE_ICU=ON              `
               -DUSE_WIN_ICU=OFF
 
@@ -202,6 +237,20 @@ jobs:
         Copy-Item -Path "${{github.workspace}}/install/*" `
                   -Destination "${{github.workspace}}/output/" `
                   -Recurse -Force
+
+    - name: Upload debug symbols to Sentry
+      shell: pwsh
+      if: ${{ env.SENTRY_AUTH_TOKEN != '' }}
+      run: |
+        # Upload every EXE/DLL/PDB so crashes in our code and in bundled
+        # dependencies symbolicate. sentry-cli scans recursively and pairs each
+        # binary with its PDB by debug-id, so we point it at the build trees
+        # (our PDBs + sentry/crashpad PDBs) and the deployed runtime.
+        npm install -g @sentry/cli
+        sentry-cli debug-files upload --include-sources `
+          "${{github.workspace}}/build" `
+          "${{github.workspace}}/sentry-build" `
+          "${{github.workspace}}/output"
 
     - name: Upload build artifact
       uses: actions/upload-artifact@v5

@@ -21,6 +21,7 @@ triplets/                vcpkg overlay triplets used by CI
 celestia/                submodule — celestiamobile/Celestia @ steam branch
 content/                 submodule — CelestiaProject/CelestiaContent
 steamworks_sdk/          submodule — community mirror of the Steamworks SDK
+sentry-native/           submodule — getsentry/sentry-native (crash reporting)
 .github/workflows/       build + upload pipeline
 ```
 
@@ -53,6 +54,30 @@ Valve's
 [Steamworks SDK Access Agreement](https://partner.steamgames.com/documentation/sdk_access_agreement)
 regardless of the source. To use a partner-site download instead, deinit the
 submodule and drop the unpacked SDK into `steamworks_sdk/`.
+
+## Crash reporting (Sentry)
+
+Crash reporting uses [sentry-native](https://github.com/getsentry/sentry-native)
+(crashpad backend, with the Qt integration) and is pinned as the
+`sentry-native/` submodule. The vcpkg port does not expose the Qt integration,
+so CI builds sentry-native from source against vcpkg's Qt6 and installs it to a
+prefix the main Celestia configure step consumes. Bumping the SDK is a normal
+submodule pointer update.
+
+The integration lives on the fork's `steam` branch behind `-DENABLE_SENTRY=ON`
+and is a no-op when no DSN is baked in. The release is tagged
+`celestia@<version>+<github-run-number>`. CI ships `crashpad_handler.exe` and
+the sentry runtime alongside `celestia-qt6.exe`, and uploads all EXE/DLL/PDB
+debug files to Sentry via `sentry-cli`.
+
+Configure these on the repository:
+
+- Secrets: **`SENTRY_DSN`** (baked into the build) and
+  **`SENTRY_AUTH_TOKEN`** (used by `sentry-cli` to upload symbols). With the
+  auth token unset, the symbol-upload step is skipped; with the DSN unset,
+  crash reporting is disabled at runtime.
+- Variables (non-secret): **`SENTRY_ORG`** and **`SENTRY_PROJECT`** slugs for
+  the `sentry-cli debug-files upload` target.
 
 ## SteamPipe
 

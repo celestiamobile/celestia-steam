@@ -8,3 +8,6 @@
 [submodule "content"]
 	path = content
 	url = https://github.com/CelestiaProject/CelestiaContent.git
+[submodule "sentry-native"]
+	path = sentry-native
+	url = https://github.com/getsentry/sentry-native.git
