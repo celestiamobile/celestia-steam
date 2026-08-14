@@ -248,15 +248,9 @@ jobs:
           throw "Visual Studio installation was not found"
         }
 
-        $redistRoot = Get-ChildItem "$installPath\VC\Redist\MSVC" -Directory |
-          Sort-Object { [version]$_.Name } -Descending |
-          Select-Object -First 1
-        if (-not $redistRoot) {
-          throw "Visual C++ Redistributable directory was not found"
-        }
-
-        $crtDir = Get-ChildItem "$($redistRoot.FullName)\x64" `
-          -Directory -Filter "Microsoft.VC*.CRT" |
+        $crtDir = Get-ChildItem `
+          "$installPath\VC\Redist\MSVC\*\x64\Microsoft.VC*.CRT" -Directory |
+          Sort-Object FullName -Descending |
           Select-Object -First 1
         if (-not $crtDir) {
           throw "x64 Visual C++ CRT directory was not found"
