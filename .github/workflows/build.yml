@@ -44,7 +44,7 @@ jobs:
     - name: Update vcpkg
       shell: pwsh
       run: |
-        $vcpkgCommit = 'e90cc0982b7cfae62447f1f3bed1fbca0bc8f6be'
+        $vcpkgCommit = '414b5330a184ea5fbc6ca29f7960b189f6b0392f'
         pushd "$env:VCPKG_INSTALLATION_ROOT"
         git fetch origin $vcpkgCommit
         git reset --hard $vcpkgCommit
@@ -180,8 +180,6 @@ jobs:
               -DENABLE_TOOLS=OFF        `
               -DENABLE_TESTS=ON         `
               -DENABLE_SDL=OFF          `
-              -DENABLE_QT5=OFF          `
-              -DENABLE_WIN=OFF          `
               -DENABLE_QT6=ON           `
               -DENABLE_FFMPEG=ON        `
               -DENABLE_MINIAUDIO=ON     `
@@ -192,7 +190,6 @@ jobs:
               -DSENTRY_DSN="${{ secrets.SENTRY_DSN }}" `
               -DSENTRY_BUILD_NUMBER="${{ github.run_number }}" `
               -Dsentry_DIR="${{github.workspace}}/sentry-install/lib/cmake/sentry" `
-              -DUSE_ICU=ON              `
               -DUSE_WIN_ICU=OFF
 
     - name: Build
